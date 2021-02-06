@@ -10,55 +10,87 @@ eg. 1 - 3 + -1
 
 enum class Operation {
     PLUS,
-    MINUS
+    MINUS,
+    NOOP
 }
 
-fun handleMath(input : String) : Int {
-    var currentOp = Operation.PLUS
+fun handleMath(input : String) : String {
+    var currentOp = Operation.NOOP
     var result = 0
     var currentIndex = 0
+    var valid = false
+    var isFirstNumber = true
     while (currentIndex < input.length) {
         var ch = input[currentIndex]
         when (ch) {
-            '+' -> currentOp = Operation.PLUS
-            '-' -> currentOp = when (currentOp) {
-                Operation.PLUS -> Operation.MINUS
-                Operation.MINUS -> Operation.PLUS
+            '+' -> {
+                currentOp = Operation.PLUS
+                valid = false
+                currentIndex++
             }
-            ' ' -> Unit
-            else -> {
+            '-' -> {
+                currentOp = if (isFirstNumber) Operation.MINUS else {
+                    when (currentOp) {
+                        Operation.PLUS -> Operation.MINUS
+                        Operation.MINUS -> Operation.PLUS
+                        Operation.NOOP -> Operation.MINUS
+                    }
+                }
+                valid = false
+                currentIndex++
+            }
+            ' ' -> currentIndex++
+            in '0'..'9' -> {
                 var tmpNum = ""
-                while (ch != '+' && ch != '-' && ch != ' ') {
+                while (ch in '0'..'9') {
                     tmpNum += ch
                     currentIndex++
                     if (currentIndex < input.length) {
                         ch = input[currentIndex]
                     } else break
                 }
-                val num = tmpNum.toInt()
-                when (currentOp) {
-                    Operation.PLUS -> result += num
-                    Operation.MINUS -> result -= num
-                }
-                currentOp = Operation.PLUS
+                if (tmpNum.isNotEmpty()) {
+                    val num = tmpNum.toInt()
+                    when (currentOp) {
+                        Operation.PLUS -> result += num
+                        Operation.MINUS -> result -= num
+                        Operation.NOOP -> {
+                            if (!isFirstNumber) {
+                                valid = false
+                                break
+                            } else {
+                                result += num
+                                isFirstNumber = false
+                            }
+                        }
 
+                    }
+                    currentOp = Operation.NOOP
+                    valid = true
+                }
             }
+            else -> currentIndex++
         }
-        currentIndex++
     }
-    return result
+    return if (valid) result.toString() else "Invalid Expression"
 }
 
+fun handleCommand(command: String): String {
+    return when (command) {
+        "/exit" -> "Bye!"
+        "/help" -> helpMessage
+        else -> "Unknown Command"
+    }
+}
 
 fun main() {
     do {
         val input = readLine()!!
-        when (input) {
-            "/exit" -> println("Bye!")
-            "/help" -> println(helpMessage)
-            "" -> Unit
-            else -> println(handleMath(input))
-
+        val result = when {
+            input.startsWith("/") -> handleCommand(input)
+            input.isNotEmpty() -> handleMath(input)
+            else -> ""
         }
+        if (result.isNotEmpty()) println(result)
     } while (input != "/exit")
 }
