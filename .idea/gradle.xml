@@ -14,8 +14,11 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/Problems/Convert a date" />
             <option value="$PROJECT_DIR$/Problems/Create an euphonious word" />
+            <option value="$PROJECT_DIR$/Problems/Letters" />
             <option value="$PROJECT_DIR$/Problems/Move the first N characters" />
             <option value="$PROJECT_DIR$/Problems/Parse url" />
+            <option value="$PROJECT_DIR$/Problems/The product of numbers from a to b" />
+            <option value="$PROJECT_DIR$/Problems/Vowels" />
             <option value="$PROJECT_DIR$/Smart Calculator/task" />
             <option value="$PROJECT_DIR$/util" />
           </set>
