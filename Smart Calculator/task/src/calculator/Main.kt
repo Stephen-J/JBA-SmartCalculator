@@ -1,6 +1,8 @@
 package calculator
 
-//todo Clean this up
+import java.math.BigInteger
+
+//todo Clean this up and add the power operator
 
 
 const val helpMessage = """
@@ -139,16 +141,16 @@ fun convertToPostfix(tokens : List<Token>) : Pair<List<Token>,String> {
     }
 }
 
-fun evaluatePostfix(tokens : List<Token>,vars : MutableMap<String,Long>) : String {
-    val stack = ArrayDeque<Long>()
+fun evaluatePostfix(tokens : List<Token>,vars : MutableMap<String,String>) : String {
+    val stack = ArrayDeque<BigInteger>()
     var error = ""
     try {
         for (token in tokens) {
             when (token.type) {
-                TokenType.NUMBER -> stack.addLast(token.value.toLong())
+                TokenType.NUMBER -> stack.addLast(BigInteger(token.value))
                 TokenType.VARIABLE -> {
                     val value = vars[token.value]
-                    if (value != null) stack.addLast(value) else {
+                    if (value != null) stack.addLast(BigInteger(value)) else {
                         error = "Unknown variable"
                         break
                     }
@@ -170,7 +172,8 @@ fun evaluatePostfix(tokens : List<Token>,vars : MutableMap<String,Long>) : Strin
     } catch (ex : Exception) {
         error = "Invalid Expression"
     }
-    if (stack.size != 1) error = "Invalid Expression"
+
+    if (stack.size != 1 && error.isEmpty()) error = "Invalid Expression"
     return if (error.isEmpty()) stack.removeLast().toString() else error
 }
 
@@ -182,12 +185,12 @@ fun handleCommand(command: Token) : String {
     }
 }
 
-fun handleAssignment(tokens : List<Token>,vars : MutableMap<String,Long>) : String? {
+fun handleAssignment(tokens : List<Token>,vars : MutableMap<String,String>) : String? {
     var result : String? = "Invalid Assignment"
     if (tokens.size == 3){
         when (tokens[2].type) {
             TokenType.NUMBER -> {
-                vars[tokens[0].value] = tokens[2].value.toLong()
+                vars[tokens[0].value] = tokens[2].value
                 result = null
             }
             TokenType.VARIABLE -> {
@@ -204,7 +207,7 @@ fun handleAssignment(tokens : List<Token>,vars : MutableMap<String,Long>) : Stri
 }
 
 fun main() {
-    val vars = mutableMapOf<String,Long>()
+    val vars = mutableMapOf<String,String>()
     val isCommand = {tokens : List<Token> ->
         tokens.size == 1 && tokens[0].type == TokenType.COMMAND
     }
