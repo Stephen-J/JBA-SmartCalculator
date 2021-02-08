@@ -1,5 +1,7 @@
 package calculator
 
+//todo Clean this up
+
 
 const val helpMessage = """
 This program accepts a string of numbers and operations (+,-)
@@ -12,23 +14,41 @@ eg. 1 - 3 + -1
 enum class TokenType {
     PLUS,
     MINUS,
+    MULTIPLICATION,
+    DIVISION,
     UNKNOWN,
     WHITESPACE,
     NUMBER,
     EQUAL,
     VARIABLE,
     COMMAND,
+    LEFT_PARENS,
+    RIGHT_PARENS,
+    POWER
 }
+
+val operators = listOf(TokenType.PLUS,TokenType.MINUS,TokenType.DIVISION,TokenType.MULTIPLICATION)
+val operands = listOf(TokenType.NUMBER,TokenType.VARIABLE)
 
 data class Token(val value : String,val type : TokenType,val start : Int) {
     val end = start + value.length
 
     companion object {
         private val varToken = "[a-zA-Z]+".toRegex()
-        private val numberToken = "\\d+".toRegex()
+        private val numberToken = "[-+]?\\d+".toRegex()
         private val commandToken = "/[a-zA-Z]+".toRegex()
         private val whitespaceToken = "\\s*".toRegex()
-
+        private val powerToken = "^\\d+".toRegex()
+        private val plusToken = "\\++".toRegex()
+        private val minusToken = "-+".toRegex()
+        val precedence = mapOf(
+            TokenType.LEFT_PARENS to 1,
+            TokenType.RIGHT_PARENS to 1,
+            TokenType.POWER to 3,
+            TokenType.MULTIPLICATION to 4,
+            TokenType.DIVISION to 4,
+            TokenType.PLUS to 5,
+            TokenType.MINUS to 5,)
 
         private fun fromMatchResult(result : MatchResult,type : TokenType) : Token {
             return Token(result.value,type,result.range.first)
@@ -37,12 +57,27 @@ data class Token(val value : String,val type : TokenType,val start : Int) {
         private fun nextToken(input : String,currentIndex : Int) : Token {
             return when (input[currentIndex].toLowerCase()) {
                 '=' -> Token(input[currentIndex].toString(),TokenType.EQUAL,currentIndex)
-                '-' -> Token(input[currentIndex].toString(),TokenType.MINUS,currentIndex)
-                '+' -> Token(input[currentIndex].toString(),TokenType.PLUS,currentIndex)
+                '-' -> {
+                    val numToken = numberToken.find(input,currentIndex)
+                    if (numToken != null && numToken.range.first == currentIndex){
+                        fromMatchResult(numToken,TokenType.NUMBER)
+                    } else {
+                        fromMatchResult(minusToken.find(input,currentIndex)!!,TokenType.MINUS)
+                    }
+                }
+                '+' -> fromMatchResult(plusToken.find(input,currentIndex)!!,TokenType.PLUS)
                 ' ' -> fromMatchResult(whitespaceToken.find(input,currentIndex)!!,TokenType.WHITESPACE)
                 in '0'..'9' -> fromMatchResult(numberToken.find(input,currentIndex)!!,TokenType.NUMBER)
                 in 'a'..'z' -> fromMatchResult(varToken.find(input,currentIndex)!!,TokenType.VARIABLE)
-                '/' -> fromMatchResult(commandToken.find(input,currentIndex)!!,TokenType.COMMAND)
+                '/' -> {
+                    if (currentIndex == 0) {
+                        fromMatchResult(commandToken.find(input,currentIndex)!!,TokenType.COMMAND)
+                    } else Token(input[currentIndex].toString(),TokenType.DIVISION,currentIndex)
+                }
+                '(' -> Token(input[currentIndex].toString(),TokenType.LEFT_PARENS,currentIndex)
+                ')' -> Token(input[currentIndex].toString(),TokenType.RIGHT_PARENS,currentIndex)
+                '^' -> fromMatchResult(powerToken.find(input,currentIndex)!!,TokenType.POWER)
+                '*' -> Token(input[currentIndex].toString(),TokenType.MULTIPLICATION,currentIndex)
                 else -> Token(input.substring(currentIndex),TokenType.UNKNOWN,currentIndex)
             }
         }
@@ -60,57 +95,83 @@ data class Token(val value : String,val type : TokenType,val start : Int) {
     }
 }
 
-fun handleExpression(tokens : List<Token>,vars : MutableMap<String,Long>) : String {
-    var result = 0L
-    var error = ""
-    var currentOp = TokenType.PLUS
-    val iterator = tokens.iterator()
-    while (iterator.hasNext()) {
-        val token = iterator.next()
+
+
+fun convertToPostfix(tokens : List<Token>) : Pair<List<Token>,String> {
+    val stack = ArrayDeque<Token>()
+    val result = mutableListOf<Token>()
+    var valid = true
+    var bracketLevel = 0
+    for (token in tokens) {
         when (token.type) {
-            TokenType.PLUS -> currentOp = TokenType.PLUS
-            TokenType.MINUS -> {
-                currentOp = when (currentOp) {
-                    TokenType.PLUS -> TokenType.MINUS
-                    TokenType.MINUS -> TokenType.PLUS
-                    else -> TokenType.MINUS
-                }
-            }
-            TokenType.VARIABLE -> {
-                val v = vars[token.value]
-                if (v != null) {
-                    when (currentOp) {
-                        TokenType.PLUS -> result += v
-                        TokenType.MINUS -> result -= v
-                        else -> {
-                            error = "Invalid Expression"
-                            break
-                        }
+            in operands -> result += token
+            in operators -> when {
+                stack.isEmpty() || stack.last().type == TokenType.LEFT_PARENS -> stack.addLast(token)
+                Token.precedence[stack.last().type]!! > Token.precedence[token.type]!! -> stack.addLast(token)
+                Token.precedence[stack.last().type]!! <= Token.precedence[token.type]!! -> {
+                    while(stack.isNotEmpty() && (Token.precedence[stack.last().type]!! > Token.precedence[token.type]!! || stack.last().type != TokenType.LEFT_PARENS)) {
+                        result += stack.removeLast()
                     }
-                    currentOp = TokenType.UNKNOWN
-                } else {
-                    error = "Unknown variable"
-                    break
+                    stack.addLast(token)
                 }
             }
-            TokenType.NUMBER -> {
-                when (currentOp) {
-                    TokenType.PLUS -> result += token.value.toLong()
-                    TokenType.MINUS -> result -= token.value.toLong()
-                    else -> {
-                        error = "Invalid Expression"
-                        break
+            TokenType.LEFT_PARENS -> {
+                stack.addLast(token)
+                bracketLevel++
+            }
+            TokenType.RIGHT_PARENS -> {
+                if (bracketLevel > 0) {
+                    while(stack.last().type != TokenType.LEFT_PARENS) {
+                        result += stack.removeLast()
                     }
-                }
-                currentOp = TokenType.UNKNOWN
-            }
-            else -> {
-                error = "Invalid Expression"
-                break
+                    stack.removeLast()
+                    bracketLevel--
+                } else valid = false
             }
         }
     }
-    return if (error.isEmpty()) result.toString() else error
+    if (bracketLevel != 0) valid = false
+    return if (!valid) {
+        result.toList() to "Invalid expression"
+    } else {
+        while (stack.isNotEmpty()) result += stack.removeLast()
+        result.toList() to ""
+    }
+}
+
+fun evaluatePostfix(tokens : List<Token>,vars : MutableMap<String,Long>) : String {
+    val stack = ArrayDeque<Long>()
+    var error = ""
+    try {
+        for (token in tokens) {
+            when (token.type) {
+                TokenType.NUMBER -> stack.addLast(token.value.toLong())
+                TokenType.VARIABLE -> {
+                    val value = vars[token.value]
+                    if (value != null) stack.addLast(value) else {
+                        error = "Unknown variable"
+                        break
+                    }
+                }
+                in operators -> {
+                    val b = stack.removeLast()
+                    val a = stack.removeLast()
+                    when (token.type) {
+                        TokenType.MULTIPLICATION -> stack.addLast(a * b)
+                        TokenType.DIVISION -> stack.addLast(a / b)
+                        TokenType.MINUS -> if (token.value.length % 2 == 0) {
+                            stack.addLast(a + b)
+                        } else stack.addLast(a - b)
+                        TokenType.PLUS -> stack.addLast(a + b)
+                    }
+                }
+            }
+        }
+    } catch (ex : Exception) {
+        error = "Invalid Expression"
+    }
+    if (stack.size != 1) error = "Invalid Expression"
+    return if (error.isEmpty()) stack.removeLast().toString() else error
 }
 
 fun handleCommand(command: Token) : String {
@@ -149,7 +210,6 @@ fun main() {
     }
     val isAssignment = {tokens : List<Token> ->
         tokens.any {it.type == TokenType.EQUAL}
-        //tokens.size == 3 && tokens[1].type == TokenType.EQUAL
     }
     do {
         val input = readLine()!!.trim()
@@ -161,7 +221,14 @@ fun main() {
                     val result = handleAssignment(tokens, vars)
                     if (result != null) println(result)
                 }
-                else -> println(handleExpression(tokens,vars))
+                else -> {
+                    val postfixed = convertToPostfix(tokens)
+                    if (postfixed.second.isEmpty()) {
+                        println(evaluatePostfix(postfixed.first,vars))
+                    } else {
+                        println(postfixed.second)
+                    }
+                }
             }
         }
     } while (input != "/exit")
